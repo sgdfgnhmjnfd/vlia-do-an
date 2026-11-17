@@ -1,0 +1,14 @@
+# Mô-đun ý định, phân tích và app (môi trường Python chính)
+torch
+transformers
+accelerate
+numpy
+pandas
+matplotlib
+opencv-python
+av
+pillow
+qwen-vl-utils
+gradio
+# Huấn luyện và chạy robot: môi trường riêng của LeRobot có LIBERO
+# lerobot[libero] @ git+https://github.com/huggingface/lerobot.git

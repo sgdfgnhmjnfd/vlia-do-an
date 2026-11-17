@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+# không đưa lên GitHub: mô hình, video, khung hình, file từng lượt chạy
+*.safetensors
+*.pt
+*.ckpt
+*.mp4
+*.mov
+*.MOV
+*.npy
+app/classifier_*.npz
+outputs/
+episodes/
