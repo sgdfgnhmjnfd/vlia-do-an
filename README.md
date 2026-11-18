@@ -125,19 +125,47 @@ Mô hình nền tải từ Hugging Face: `lerobot/smolvla_base`, `google/siglip-
 - **Bước 1 · Đoán ý định**: tải lên video người đang làm; app cho câu ý định của C, F, G khi xem 25, 50, 75, 100% đoạn hành động. F báo "robot hỏi lại" khi không chắc.
 - **Bước 2 · Robot làm theo**: chọn câu ý định và cảnh LIBERO-10; robot chạy một lượt **không có câu lệnh**, chỉ nhận token ý định; app hiện video robot.
 
-```bash
-# 1) một lần: huấn luyện bộ phân loại C cho app (cần đặc trưng từ "run_stage15_supervised.py extract")
-python scripts/train_app_classifier.py            # tạo app/classifier_svm_lin.npz
+**Một lần: dựng bộ phân loại C cho app.** Tệp `app/classifier_svm_lin.npz` không nằm trong repo. Dựng nó từ đặc trưng SigLIP mà `run_stage15_supervised.py extract` đã lưu (thư mục `$VLIA_DATA_ROOT/vlia_outputs/stage15/feat`). Đây là SVM tuyến tính nhỏ, chạy trên CPU khoảng 10 giây:
 
-# 2) chạy app
-export PY=$(which python)                          # môi trường phân tích
-export VPY=$HOME/lerobot/.venv/bin/python          # môi trường LeRobot có LIBERO
-export LEROBOT_DIR=$HOME/lerobot
-python app/vlia_app.py --vlia-checkpoint /duong/dan/checkpoint/pretrained_model
-# thêm --share để có link công khai, --port để đổi cổng
+```bash
+CUDA_VISIBLE_DEVICES="" python scripts/train_app_classifier.py --out app/classifier_svm_lin.npz
 ```
 
-Mở `http://localhost:7860`. Nếu video có đoạn đứng yên ở đầu, nhập giây tay bắt đầu chạm đồ vật và giây đặt xong đồ vật cuối. Thiếu bộ phân loại thì cột C hiện "chưa có bộ phân loại"; thiếu GPU thì F, G không chạy.
+**Biến môi trường dùng chung** (sửa đường dẫn cho máy của bạn):
+
+```bash
+export VLIA_DATA_ROOT=/duong/dan/o_du_lieu HF_HOME=$VLIA_DATA_ROOT/hf_cache HF_HUB_OFFLINE=1
+export PY=$(which python)                          # môi trường phân tích (có gradio)
+export VPY=$HOME/lerobot/.venv/bin/python          # môi trường LeRobot có LIBERO
+export LEROBOT_DIR=$HOME/lerobot
+export GRADIO_SERVER_NAME=0.0.0.0                  # để mở được từ máy khác trong mạng
+CKPT=/duong/dan/checkpoint/pretrained_model
+```
+
+**Chế độ GPU** (đủ cả C, F, G; G cần thêm khoảng 8 GB bộ nhớ GPU cho Qwen2.5-VL-3B):
+
+```bash
+$PY app/vlia_app.py --vlia-checkpoint $CKPT --port 7860
+```
+
+**Chế độ CPU** (khi GPU đang bận, ví dụ đang huấn luyện): C và F chạy trên CPU, bỏ tích "Chạy cả G" vì G chỉ chạy trên GPU. Robot chạy chính sách trên CPU, nhưng MuJoCo vẫn vẽ hình bằng EGL trên GPU 0 (khoảng 0,7 GB), nên máy vẫn cần GPU NVIDIA:
+
+```bash
+CUDA_VISIBLE_DEVICES="" nice -n 19 $PY app/vlia_app.py --vlia-checkpoint $CKPT --port 7860
+```
+
+Thử trên máy phòng thí nghiệm (CPU, 18/11/2026): mỗi lần đoán ý định mất khoảng 1,5 đến 2 phút, một lượt robot khoảng 3,5 phút.
+
+Mở `http://localhost:7860`. Thêm `--share` để có link công khai. Nếu video có đoạn đứng yên ở đầu, nhập giây tay bắt đầu chạm đồ vật và giây đặt xong đồ vật cuối. Thiếu bộ phân loại thì cột C hiện "chưa có bộ phân loại".
+
+![Bước 2](docs/app_buoc2.png)
+
+### Gợi ý khi trình diễn
+
+- App đã chạy được trên máy phòng thí nghiệm ở **chế độ CPU** (cả hai bước). **Chế độ GPU và mô-đun G chưa được thử trong app.**
+- App dùng checkpoint **25.000 bước**; sẽ thay bằng bản 100.000 bước khi huấn luyện xong.
+- Video mẫu nên dùng (lấy từ bộ video tự quay, không có trong repo): `t5_r3_p1`, `t9_r3_p3`, `t2_r1_p3`, `t4_r2_p1`; dự phòng `t2_r2_p3`. Các video này cho ý định đúng ở mọi mức 25/50/75/100% (riêng `t4_r2_p1` chỉ F đúng).
+- Bộ phân loại C và mô-đun F trong app chỉ được huấn luyện/chọn trên video LIBERO, nên app đoán sai khá nhiều trên video người thật. Độ chính xác của app trên video tự quay **không phải số liệu của đồ án**; số trên video người thật ở mục 5 là kiểm tra chéo bỏ ra một người, làm riêng ngoài app.
 
 ## Chạy lại thí nghiệm
 
@@ -169,6 +197,7 @@ Mỗi script có `--help`. Lượt thứ `e` của nhiệm vụ `t` luôn dùng 
 - Chính sách mới huấn luyện 25.000 bước, một hạt giống; bản 100.000 bước đang huấn luyện.
 - Trên LIBERO-10 cảnh làm lộ nhiệm vụ; trên video người thật mới nhận ra nhiệm vụ sau khi tay chạm, chưa đoán trước được.
 - Hỏi lại là mô phỏng: câu trả lời của người được thay bằng nhãn đúng.
+- App demo: mới thử chế độ CPU; chế độ GPU và mô-đun G chưa thử trong app.
 
 ## Mô hình đã huấn luyện
 
@@ -183,6 +212,8 @@ VLIA lets a VLA policy (SmolVLA) act **without a language instruction**: an inte
 - Open-ended generation (G, Qwen2.5-VL-3B, no label list): 29.4% at 25% of the video; prompt and self-trained writer variants did not close the gap.
 - Closed loop (299 episodes, 25% of the video): C 52/299, F 35/299 (50/299 with simulated ask-back on 17% of episodes), G 6/299, wrong token 3/299.
 - Own human videos (90 clips, 3 people, 5 tables, pre-registered): within a shared table, scene only 42.0% (chance 44.4%) vs scene + motion 74.1% at half of the manipulation. This is **task recognition shortly after the hand touches an object** (stable from ~0.5–1.25 s after first contact), **not anticipation before contact**. Calibrated ask-back did not beat random asking.
+
+Demo app: tested on the lab machine in CPU mode only (GPU mode and module G untested in the app); it uses the 25k-step checkpoint, and its C/F are fit on LIBERO videos only, so its accuracy on own human videos is not a thesis result.
 
 Main code: `policies/intention/adapter.py`, `policies/smolvla/modeling_smolvla.py`, `scripts/train_intention_only_LIBERO7D.py`, `scripts/libero_goal_ablation.py`, `scripts/run_stage15_supervised.py` (C), `scripts/run_stage12_e2e.py` (F), `scripts/run_stage14_generate.py` (G), demo `app/vlia_app.py`. Requires Linux + NVIDIA GPU.
 
